@@ -1047,6 +1047,16 @@ struct ipa_sps_pm {
 };
 
 /**
+ * struct ipacm_client_info - the client-info indicated from IPACM
+ * @ipacm_client_enum: the enum to indicate tether-client
+ * @ipacm_client_uplink: the bool to indicate pipe for uplink
+ */
+struct ipacm_client_info {
+	enum ipacm_client_enum client_enum;
+	bool uplink;
+};
+
+/**
  * struct ipa_context - IPA context
  * @class: pointer to the struct class
  * @dev_num: device number
@@ -1220,6 +1230,8 @@ struct ipa_context {
 	u32 peer_bam_map_cnt;
 
 	bool tethered_flow_control;
+	/* M-release support to know client pipes */
+	struct ipacm_client_info ipacm_client[IPA_MAX_NUM_PIPES];
 };
 
 /**
@@ -1381,6 +1393,15 @@ struct ipa_controller {
 };
 
 extern struct ipa_context *ipa_ctx;
+
+/*
+ * Tethering client info
+ */
+void ipa_set_client(int index, enum ipacm_client_enum client, bool uplink);
+
+enum ipacm_client_enum ipa_get_client(int pipe_idx);
+
+bool ipa_get_client_uplink(int pipe_idx);
 
 int ipa_send_one(struct ipa_sys_context *sys, struct ipa_desc *desc,
 		bool in_atomic);
