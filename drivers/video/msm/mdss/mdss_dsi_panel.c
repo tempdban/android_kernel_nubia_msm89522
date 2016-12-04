@@ -24,6 +24,10 @@
 
 #include "mdss_dsi.h"
 
+#ifdef CONFIG_ZTEMT_LCD_DISP_PREFERENCE
+#include "ztemt_disp_preference.h"
+#endif
+
 #define DT_CMD_HDR 6
 #define MIN_REFRESH_RATE 48
 #define DEFAULT_MDP_TRANSFER_TIME 14000
@@ -168,7 +172,23 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
-
+int zte_mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+			struct dsi_panel_cmds *pcmds)
+{
+	int ret = 0;
+	struct mdss_panel_info *pinfo;
+	pr_err("zte lcd disp func");
+	pinfo = &(ctrl->panel_data.panel_info);
+	if(pinfo->blank_state == MDSS_PANEL_BLANK_UNBLANK || pinfo->cont_splash_enabled){
+		mdss_dsi_panel_cmds_send(ctrl,pcmds);
+		ret = 0;
+		pr_err("zte lcd disp func");
+	}else{
+		pr_err("zte lcd disp not ready");
+		ret = -1;
+	}
+	return ret;
+}
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
 static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
@@ -293,7 +313,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 		if (!pinfo->cont_splash_enabled) {
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+				gpio_direction_output((ctrl_pdata->disp_en_gpio), 1);
 
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
@@ -324,7 +344,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_free(ctrl_pdata->bklt_en_gpio);
 		}
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
-			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+			gpio_direction_output((ctrl_pdata->disp_en_gpio), 0);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
@@ -578,6 +598,8 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	 * for the backlight brightness. If the brightness is less
 	 * than it, the controller can malfunction.
 	 */
+
+
 
 	if ((bl_level < pdata->panel_info.bl_min) && (bl_level != 0))
 		bl_level = pdata->panel_info.bl_min;
@@ -1758,6 +1780,92 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
 
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cmds_off,
+                "zte,mdss-dsi-ce-command-off", "zte,mdss-dsi-ce-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cmds_soft,
+		"zte,mdss-dsi-ce-command-soft", "zte,mdss-dsi-ce-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cmds_std,
+		"zte,mdss-dsi-ce-command-std", "zte,mdss-dsi-ce-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cmds_glow,
+		"zte,mdss-dsi-ce-command-glow", "zte,mdss-dsi-ce-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_cmds_off,
+                "zte,mdss-dsi-cabc-command-off", "zte,mdss-dsi-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_cmds_lever1,
+                "zte,mdss-dsi-cabc-command-lever1", "zte,mdss-dsi-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_cmds_lever2,
+                "zte,mdss-dsi-cabc-command-lever2", "zte,mdss-dsi-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_cmds_lever3,
+                "zte,mdss-dsi-cabc-command-lever3", "zte,mdss-dsi-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds0,
+		"zte,mdss-dsi-ce-cabc-command0", "zte,mdss-dsi-ce-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds1,
+                "zte,mdss-dsi-ce-cabc-command1", "zte,mdss-dsi-ce-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds2,
+                "zte,mdss-dsi-ce-cabc-command2", "zte,mdss-dsi-ce-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds3,
+                "zte,mdss-dsi-ce-cabc-command3", "zte,mdss-dsi-ce-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds4,
+                "zte,mdss-dsi-ce-cabc-command4", "zte,mdss-dsi-ce-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds5,
+                "zte,mdss-dsi-ce-cabc-command5", "zte,mdss-dsi-ce-cabc-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds6,
+                "zte,mdss-dsi-ce-cabc-command6", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds7,
+                "zte,mdss-dsi-ce-cabc-command7", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds8,
+                "zte,mdss-dsi-ce-cabc-command8", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds9,
+                "zte,mdss-dsi-ce-cabc-command9", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds10,
+                "zte,mdss-dsi-ce-cabc-command10", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds11,
+                "zte,mdss-dsi-ce-cabc-command11", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds12,
+                "zte,mdss-dsi-ce-cabc-command12", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds13,
+                "zte,mdss-dsi-ce-cabc-command13", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds14,
+                "zte,mdss-dsi-ce-cabc-command14", "zte,mdss-dsi-ce-cabc-command-state");
+
+        mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_cabc_cmds15,
+                "zte,mdss-dsi-ce-cabc-command15", "zte,mdss-dsi-ce-cabc-command-state");
+
+	data = of_get_property(np, "zte,mdss-dsi-panel-backlight-curve", &len);
+	if((!data) || (len != 256)) {
+		pr_err("%s:%d, Unable to read zte backlight curve",
+		       __func__, __LINE__);
+		for (i = 0; i < 256; i++)
+                        ctrl_pdata->backlight_curve[i] = i;
+	}else{
+		for (i = 0; i < len; i++)
+			ctrl_pdata->backlight_curve[i] = data[i];
+		for (i = 0; i < len; i++)
+			pr_debug("ctrl_pdata->backlight_curve[%d] = %d",i,ctrl_pdata->backlight_curve[i]);
+	}
+
+
 	pinfo->mipi.force_clk_lane_hs = of_property_read_bool(np,
 		"qcom,mdss-dsi-force-clock-lane-hs");
 
@@ -1822,6 +1930,10 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+
+#ifdef CONFIG_ZTEMT_LCD_DISP_PREFERENCE
+	ztemt_set_dsi_ctrl(ctrl_pdata);
+#endif
 
 	return 0;
 }

@@ -12,6 +12,8 @@ menuconfig INPUT_TOUCHSCREEN
 if INPUT_TOUCHSCREEN
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+source "drivers/input/touchscreen/gt1x/Kconfig"
+source "drivers/input/touchscreen/cyttsp5/Kconfig"
 
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
@@ -1075,3 +1077,4 @@ config TOUCHSCREEN_IT7260_I2C
 	  module will be called it7258_ts_i2c.
 
 endif
+source "drivers/input/touchscreen/cyttsp/Kconfig"

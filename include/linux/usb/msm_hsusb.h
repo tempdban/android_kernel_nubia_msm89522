@@ -498,6 +498,9 @@ struct msm_otg {
 	struct delayed_work chg_work;
 	struct delayed_work id_status_work;
 	struct delayed_work suspend_work;
+	#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+	struct delayed_work chg_recheck_work;
+	#endif
 	enum usb_chg_state chg_state;
 	enum usb_chg_type chg_type;
 	unsigned dcd_time;

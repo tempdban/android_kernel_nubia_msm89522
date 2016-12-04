@@ -409,6 +409,41 @@ struct qpnp_chg_chip {
 	unsigned int			ext_ovp_isns_gpio;
 	unsigned int			usb_trim_default;
 	u8				chg_temp_thresh_default;
+	#ifdef CONFIG_ZTEMT_POWER_DEBUG
+	struct delayed_work power_debug_work;
+	#endif
+#ifdef CONFIG_ZTEMT_COMM_CHARGE
+	enum  dwc3_chg_type   chg_type;
+	struct delayed_work battery_monitor_work;
+#endif
+};
+#ifdef CONFIG_ZTEMT_POWER_DEBUG
+#include <../../arch/arm/mach-msm/clock.h>
+#define POWER_MONITOR_PERIOD_MS	10000
+#define DRV_NAME "zte_power_debug"
+static int power_debug_switch=1;
+static struct qpnp_chg_chip *chip_temp;
+extern int msm_show_resume_irq_mask; //used to print the resume irq
+extern void global_print_active_locks( void );
+//print suspend_states
+//extern int suspend_stats_debug(void);
+#endif
+
+#ifdef CONFIG_ZTEMT_COMM_CHARGE
+struct monitor_status {
+    bool  is_charger_online;
+    bool  is_temp_abnormal;
+	int  batt_temp;
+};
+
+static struct monitor_status monitor_st = {
+    .is_charger_online = 0,
+	.is_temp_abnormal = 0,
+	.batt_temp = 25,
+};
+enum batt_temp_st {
+	BATT_TEMP_GOOD = 0,
+	BATT_TEMP_ABNORMAL = 1,
 };
 
 static void
@@ -5369,6 +5404,149 @@ qpnp_charger_read_dt_props(struct qpnp_chg_chip *chip)
 
 	return rc;
 }
+#ifdef CONFIG_ZTEMT_POWER_DEBUG
+
+static void print_battery_information(struct qpnp_chg_chip *chip)
+{
+  #ifdef CONFIG_ZTEMT_BATTERY_MAX17050
+  return;
+  #endif
+  printk("BMS capacity=%d current=%d vbat_uv=%d temp=%d usb_in=%d\n",
+    get_prop_capacity(chip),
+    get_prop_current_now(chip),
+    get_prop_battery_voltage_now(chip),
+    get_prop_batt_temp(chip),
+    qpnp_chg_is_usb_chg_plugged_in(chip));
+}
+
+static void power_debug_work_func(struct work_struct *work)
+{
+	struct qpnp_chg_chip *chip = container_of(work,
+	                                          struct qpnp_chg_chip,
+	                                          power_debug_work.work);
+	printk("power_debug_work_func_______start!\n");
+	//print battery related information
+	print_battery_information(chip);
+	//print wakelocks
+	global_print_active_locks();
+	//wakelock_stats_show_debug();
+	schedule_delayed_work(&chip->power_debug_work,
+			  round_jiffies_relative(msecs_to_jiffies
+						(POWER_MONITOR_PERIOD_MS)));
+	printk("power_debug_work_func_________over!\n");
+
+}
+
+static int power_debug_work_control(int on)
+{
+	int ret;
+	struct qpnp_chg_chip *chip = chip_temp; 
+	if(1==on)
+	{
+		if(1==power_debug_switch)
+		{
+			printk("%s:The power_debug_work is already on\n",__func__);
+			ret=1;
+		}
+		else
+		{
+			power_debug_switch=1;
+			msm_show_resume_irq_mask=1;
+			INIT_DELAYED_WORK(&chip->power_debug_work,  power_debug_work_func);
+			schedule_delayed_work(&chip->power_debug_work,
+			  round_jiffies_relative(msecs_to_jiffies
+						(POWER_MONITOR_PERIOD_MS)));
+
+			printk("%s:enable power_debug_work.\n",__func__);
+		}
+	}
+	else
+	{
+
+		if(0==power_debug_switch)
+		{
+			printk("%s:The power_debu_timer is already off\n",__func__);
+			ret=1;
+		}
+		else
+		{
+			power_debug_switch=0;
+			msm_show_resume_irq_mask=0;
+			cancel_delayed_work(&chip->power_debug_work);
+			printk("%s:disable power_debug_work.\n",__func__);
+		}
+
+	}
+	return ret;
+}
+
+
+static ssize_t po_info_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+
+	sprintf(buf, "%u\n", power_debug_switch);
+	return 1;
+}
+static ssize_t po_info_store(struct device *dev, 
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+
+	unsigned int val;
+
+	if (sscanf(buf, "%u", &val) == 1) {
+		if (power_debug_work_control(val))
+			return count;
+	}
+	return -EINVAL;
+}
+
+static ssize_t clock_dump_show(struct device *dev, 
+		struct device_attribute *attr, char *buf)
+{
+
+	sprintf(buf, "%u\n", power_debug_switch);
+	clock_debug_print_enabled();
+	return 1;
+}
+
+static DEVICE_ATTR(switch, 0644, po_info_show, po_info_store);
+static DEVICE_ATTR(clock_dump, 0644,  clock_dump_show, NULL);
+static struct kobject *po_kobject = NULL;
+
+static int power_debug_init(struct qpnp_chg_chip *chip)
+{
+	int ret;
+	chip_temp = chip;
+	po_kobject = kobject_create_and_add(DRV_NAME, NULL);
+	if(po_kobject == NULL) {
+		ret = -ENOMEM;
+		goto err1;
+	}
+
+	ret = sysfs_create_file(po_kobject, &dev_attr_switch.attr);
+	ret |= sysfs_create_file(po_kobject, &dev_attr_clock_dump.attr);
+	if(ret){
+		goto err;
+	}
+
+	INIT_DELAYED_WORK(&chip->power_debug_work,  power_debug_work_func);
+
+	if(power_debug_switch) {
+	  msm_show_resume_irq_mask=1; //on in default, deleted is allow.
+	  schedule_delayed_work(&chip->power_debug_work,
+			  round_jiffies_relative(msecs_to_jiffies
+						(POWER_MONITOR_PERIOD_MS)));
+	}
+	return 0;
+
+err:
+	kobject_del(po_kobject);
+err1:
+	printk(DRV_NAME": Failed to create sys file\n");
+	return ret;
+}
+#endif
 
 static int
 qpnp_charger_probe(struct spmi_device *spmi)
@@ -5743,6 +5921,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_chg_is_dc_chg_plugged_in(chip),
 			get_prop_batt_present(chip),
 			get_prop_batt_health(chip));
+	#ifdef CONFIG_ZTEMT_POWER_DEBUG
+	power_debug_init(chip);
+	#endif
 	return 0;
 
 unregister_dc_psy:

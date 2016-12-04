@@ -90,6 +90,23 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 	uint32_t size = a_ctrl->reg_tbl_size, i = 0;
 	struct msm_camera_i2c_reg_array *i2c_tbl = a_ctrl->i2c_reg_tbl;
 	CDBG("Enter\n");
+    //ZTEMT yuanl start add 20151217 此马达是两个寄存器
+    if(strncmp(a_ctrl->act_name,"ak7371",strlen("ak7371"))==0 && size==2)
+    {
+        i2c_tbl[0].reg_addr = write_arr[0].reg_addr;
+        i2c_tbl[0].delay = delay;
+        i2c_tbl[0].reg_data = ((next_lens_position << write_arr[0].data_shift) & 0xFF00)>>8;
+
+        i2c_tbl[1].reg_addr = write_arr[1].reg_addr;
+        i2c_tbl[1].delay = delay;
+        i2c_tbl[1].reg_data = ((next_lens_position << write_arr[1].data_shift) & 0xFF);
+
+        a_ctrl->i2c_tbl_index = 2;
+        //pr_err("yuanl::addr0=%d,data0=%d\n",i2c_tbl[0].reg_addr,i2c_tbl[0].reg_data);
+        //pr_err("yuanl::addr1=%d,data1=%d\n",i2c_tbl[1].reg_addr,i2c_tbl[1].reg_data);
+        return;
+    }
+    //ZTEMT yuanl end
 	for (i = 0; i < size; i++) {
 		/* check that the index into i2c_tbl cannot grow larger that
 		the allocated size of i2c_tbl */
@@ -1106,6 +1123,40 @@ static int32_t msm_actuator_set_position(
 	for (index = 0; index < set_pos->number_of_steps; index++) {
 		next_lens_position = set_pos->pos[index];
 		delay = set_pos->delay[index];
+		
+		//ZTEMT: added by congshan for manu af start
+		hw_params = set_pos->hw_params;
+		#ifdef USE_8939
+		if ((!strncmp(a_ctrl->act_name, "alps_bu64297gwz", 32))) {
+			uint16_t value=0;
+	        int dac_offset = 320;
+			//hw_params = 0xF400;
+			value = set_pos->pos[index];
+			if(value < 0 || value > 79) {
+				pr_err("%s value is invalid %d\n", __func__, __LINE__);
+				return rc;
+			}
+	    	value = 79 - value;
+			if(value >= 77) {			   
+				next_lens_position = a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] + 
+					a_ctrl->step_position_table[0] + dac_offset;
+				next_lens_position =  (next_lens_position > 1000)?1000:next_lens_position;
+				//pr_err("zwtadd-0610-1,code=%d",next_lens_position);	
+				next_lens_position =  next_lens_position - 45*(79-value);
+				a_ctrl->curr_step_pos = a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] - 1;
+			} else {
+				int code_total = a_ctrl->step_position_table[0] +
+				 	   a_ctrl->region_params[a_ctrl->region_size - 1].step_bound[MOVE_NEAR] + dac_offset;	
+				code_total =  (code_total > 1000)?1000:code_total;
+				//pr_err("zwtadd-0610-1,code=%d",next_lens_position);
+				code_total -= (a_ctrl->step_position_table[0] + 90 + set_pos->dac_comp);
+				next_lens_position = a_ctrl->step_position_table[0] + (code_total * value / 77)  + set_pos->dac_comp ;
+				a_ctrl->curr_step_pos = next_lens_position - a_ctrl->step_position_table[0];
+			}
+			pr_err("zwtadd-0608-1,value=%d,code=%d",value,next_lens_position);
+	    }
+		#endif
+		//ZTEMT: added by congshan for manu af end
 		a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
 		next_lens_position, hw_params, delay);
 
@@ -1397,6 +1448,16 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		if (rc < 0)
 			pr_err("Failed actuator power up%d\n", rc);
 		break;
+	// ZTEMT: fuyipeng add for manual AF -----start
+	case CFG_SET_ACTUATOR_NAME:
+		if (NULL != cdata->cfg.act_name) {
+			strncpy(a_ctrl->act_name,
+				cdata->cfg.act_name,
+				MSM_ACTUATOT_MAX_NAME - 1);
+			pr_err("CFG_SET_ACTUATOR_NAME ---act_name:%s \n", a_ctrl->act_name);
+		}
+		break;
+	// ZTEMT: fuyipeng add for manual AF -----end
 
 	default:
 		break;
@@ -1620,6 +1681,13 @@ static long msm_actuator_subdev_do_ioctl(
 				compat_ptr(u32->cfg.move.ringing_params);
 			parg = &actuator_data;
 			break;
+		// ZTEMT: fuyipeng add for manual AF -----start
+        case CFG_SET_ACTUATOR_NAME:
+           actuator_data.cfgtype = u32->cfgtype;
+           actuator_data.cfg.act_name = u32->cfg.act_name;
+           parg = &actuator_data;
+		break;
+            // ZTEMT: fuyipeng add for manual AF -----end
 		case CFG_SET_POSITION:
 			actuator_data.cfgtype = u32->cfgtype;
 			actuator_data.is_af_supported = u32->is_af_supported;

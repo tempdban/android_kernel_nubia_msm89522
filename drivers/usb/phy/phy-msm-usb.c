@@ -128,6 +128,10 @@ static struct regulator *vbus_otg;
 static struct regulator *mhl_usb_hs_switch;
 static struct power_supply *psy;
 
+#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+extern int nubia_get_powon_st_once(void);
+#endif
+
 static bool aca_id_turned_on;
 static bool legacy_power_supply;
 static inline bool aca_enabled(void)
@@ -1686,10 +1690,14 @@ phcd_retry:
 	atomic_set(&motg->in_lpm, 1);
 	wake_up(&motg->host_suspend_wait);
 
-	/* Enable ASYNC IRQ during LPM */
-	enable_irq(motg->async_irq);
+    if (host_bus_suspend || device_bus_suspend) { 
+    /* Enable ASYNC IRQ during LPM */ 
+       enable_irq(motg->async_irq); 
+       enable_irq(motg->irq); 
+    }
+	if (motg->phy_irq) 
+	enable_irq(motg->phy_irq);
 
-	enable_irq(motg->irq);
 	wake_unlock(&motg->wlock);
 
 	dev_dbg(phy->dev, "LPM caps = %lu flags = %lu\n",
@@ -1736,7 +1744,9 @@ static int msm_otg_resume(struct msm_otg *motg)
 
 	msm_bam_notify_lpm_resume(CI_CTRL);
 
-	disable_irq(motg->irq);
+
+    if (motg->host_bus_suspend || motg->device_bus_suspend) 
+       disable_irq(motg->irq); 
 	wake_lock(&motg->wlock);
 
 	/*
@@ -1895,7 +1905,9 @@ skip_phy_resume:
 	enable_irq(motg->irq);
 
 	/* Enable ASYNC_IRQ only during LPM */
-	disable_irq(motg->async_irq);
+
+    if (motg->host_bus_suspend || motg->device_bus_suspend) 
+       disable_irq(motg->async_irq); 
 
 	if (motg->phy_irq_pending) {
 		motg->phy_irq_pending = false;
@@ -2604,13 +2616,27 @@ static void msm_otg_chg_check_timer_func(unsigned long data)
 		return;
 	}
 
+	#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+	//ZTEMT add, support floated charger, fix current 900mA
+	pr_info("floated charger is detected as SDP\n");
+	msm_otg_notify_charger(motg, 900);
+	#endif
+
 	if ((readl_relaxed(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
 		dev_dbg(otg->phy->dev, "DCP is detected as SDP\n");
 		msm_otg_dbg_log_event(&motg->phy, "DCP IS DETECTED AS SDP",
 				otg->phy->state, 0);
 		set_bit(B_FALSE_SDP, &motg->inputs);
 		queue_work(motg->otg_wq, &motg->sm_work);
+		#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+		return;
+		#endif
 	}
+
+	#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+	if( nubia_get_powon_st_once() )
+		queue_delayed_work(motg->otg_wq, &motg->chg_recheck_work, msecs_to_jiffies(60000));
+	#endif
 }
 
 static bool msm_chg_aca_detect(struct msm_otg *motg)
@@ -3164,6 +3190,27 @@ static void msm_chg_detect_work(struct work_struct *w)
 	msm_otg_dbg_log_event(phy, "CHG WORK: QUEUE", motg->chg_type, delay);
 	queue_delayed_work(motg->otg_wq, &motg->chg_work, delay);
 }
+
+#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+static void nubia_chg_recheck_work(struct work_struct *w)
+{
+	struct msm_otg *motg = container_of(w, struct msm_otg, chg_recheck_work.work);
+
+	if(motg->cur_power == 0 
+		|| motg->cur_power == 500
+		|| motg->cur_power == 100
+		|| motg->cur_power == 2){
+		pr_info("SMBCHG: %s: cur_power=%d,it should be SDP\n",__func__,motg->cur_power);
+		return;
+	}
+	
+	motg->chg_type = USB_DCP_CHARGER;
+	motg->usb_psy.type = POWER_SUPPLY_TYPE_USB_DCP;
+	msm_otg_notify_charger(motg, dcp_max_current);
+	
+	pr_info("SMBCHG: %s: set chg_type=%d [%s]\n", __func__,motg->chg_type, chg_to_string(motg->chg_type));
+}
+#endif
 
 #define VBUS_INIT_TIMEOUT	msecs_to_jiffies(5000)
 
@@ -4812,6 +4859,10 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 		break;
 	/* Process PMIC notification in PRESENT prop */
 	case POWER_SUPPLY_PROP_PRESENT:
+		#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+		if(!val->intval)
+			cancel_delayed_work_sync(&motg->chg_recheck_work);
+		#endif
 		msm_otg_set_vbus_state(val->intval);
 		break;
 	/* The ONLINE property reflects if usb has enumerated */
@@ -5950,6 +6001,9 @@ static int msm_otg_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	INIT_DELAYED_WORK(&motg->id_status_work, msm_id_status_w);
 	INIT_DELAYED_WORK(&motg->suspend_work, msm_otg_suspend_work);
+	#ifdef CONFIG_ZTEMT_MSM8952_CHARGER
+	INIT_DELAYED_WORK(&motg->chg_recheck_work, nubia_chg_recheck_work);
+	#endif
 	setup_timer(&motg->id_timer, msm_otg_id_timer_func,
 				(unsigned long) motg);
 	setup_timer(&motg->chg_check_timer, msm_otg_chg_check_timer_func,

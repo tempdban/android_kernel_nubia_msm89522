@@ -117,22 +117,22 @@ static int32_t msm_torch_create_classdev(struct platform_device *pdev,
 	}
 
 	for (i = 0; i < fctrl->torch_num_sources; i++) {
-		if (fctrl->torch_trigger[i]) {
+		if (fctrl->torch_trigger[i] && (i+g_flash_probe_count)<MAX_LED_TRIGGERS) {
 			torch_trigger = fctrl->torch_trigger[i];
 			CDBG("%s:%d msm_torch_brightness_set for torch %d",
 				__func__, __LINE__, i);
-			msm_torch_brightness_set(&msm_torch_led[i],
+			msm_torch_brightness_set(&msm_torch_led[i+g_flash_probe_count],
 				LED_OFF);
 
 			rc = led_classdev_register(&pdev->dev,
-				&msm_torch_led[i]);
+				&msm_torch_led[i+g_flash_probe_count]);
 			if (rc) {
 				pr_err("Failed to register %d led dev. rc = %d\n",
 						i, rc);
 				return rc;
 			}
 		} else {
-			pr_err("Invalid fctrl->torch_trigger[%d]\n", i);
+			pr_err("Invalid fctrl->torch_trigger[%d] or g_flash_probe_count cause out_bounder: %d\n", i,g_flash_probe_count);
 			return -EINVAL;
 		}
 	}
@@ -1229,6 +1229,7 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 		rc = msm_torch_create_classdev(pdev, flash_ctrl);
 
 	CDBG("probe success\n");
+	g_flash_probe_count++;
 	return rc;
 }
 

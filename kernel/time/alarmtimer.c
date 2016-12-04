@@ -27,6 +27,10 @@
 #include <linux/freezer.h>
 #include "lpm-levels.h"
 
+#ifdef CONFIG_ZTEMT_PON_ALARM_DELTA
+#define ALARM_DELTA 120
+#endif
+
 /**
  * struct alarm_base - Alarm timer bases
  * @lock:		Lock for syncrhonized access to the base
@@ -116,8 +120,16 @@ void set_power_on_alarm(long secs, bool enable)
 	 *to power up the device before actual alarm
 	 *expiration
 	 */
+
+#ifdef CONFIG_ZTEMT_PON_ALARM_DELTA
+	if ((alarm_time - ALARM_DELTA) > rtc_secs)
+		alarm_time -= ALARM_DELTA;
+	else
+		goto disable_alarm;
+#else
 	if (alarm_time <= rtc_secs)
 		goto disable_alarm;
+#endif
 
 	rtc_time_to_tm(alarm_time, &alarm.time);
 	alarm.enabled = 1;

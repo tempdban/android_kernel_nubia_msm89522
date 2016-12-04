@@ -432,6 +432,9 @@ enum msm_actuator_cfg_type_t {
 	CFG_ACTUATOR_POWERDOWN,
 	CFG_ACTUATOR_POWERUP,
 	CFG_ACTUATOR_INIT,
+	// ZTEMT: fuyipeng add for manual AF -----start
+	CFG_SET_ACTUATOR_NAME,
+    // ZTEMT: fuyipeng add for manual AF -----end
 };
 
 enum msm_ois_cfg_type_t {
@@ -555,6 +558,7 @@ struct msm_actuator_set_position_t {
 	uint32_t hw_params;
 	uint16_t pos[MAX_NUMBER_OF_STEPS];
 	uint16_t delay[MAX_NUMBER_OF_STEPS];
+	int16_t dac_comp;//ZTEMT zhangwenting 20150611 add manual AF DAC compensation
 };
 
 struct msm_actuator_cfg_data {
@@ -566,6 +570,9 @@ struct msm_actuator_cfg_data {
 		struct msm_actuator_get_info_t get_info;
 		struct msm_actuator_set_position_t setpos;
 		enum af_camera_name cam_name;
+		// ZTEMT: fuyipeng add for manual AF -----start
+        char *act_name;
+       // ZTEMT: fuyipeng add for manual AF -----end	
 	} cfg;
 };
 
@@ -720,6 +727,9 @@ struct msm_actuator_cfg_data32 {
 		struct msm_actuator_get_info_t get_info;
 		struct msm_actuator_set_position_t setpos;
 		enum af_camera_name cam_name;
+		// ZTEMT: fuyipeng add for manual AF -----start
+        char *act_name;
+        // ZTEMT: fuyipeng add for manual AF -----end	
 	} cfg;
 };
 

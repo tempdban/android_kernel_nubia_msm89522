@@ -31,6 +31,10 @@
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
 
+#ifdef CONFIG_ZTEMT_LCD_DISP_PREFERENCE
+#include "ztemt_disp_preference.h"
+#endif
+
 #define XO_CLK_RATE	19200000
 
 /* Master structure to hold all the information about the DSI/panel */
@@ -2304,6 +2308,9 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_unblank(pdata);
 		pdata->panel_info.esd_rdy = true;
+#ifdef CONFIG_ZTEMT_LCD_DISP_PREFERENCE
+	ztemt_disp_preference();
+#endif
 		break;
 	case MDSS_EVENT_BLANK:
 		power_state = (int) (unsigned long) arg;

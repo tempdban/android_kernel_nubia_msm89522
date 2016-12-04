@@ -449,7 +449,7 @@
 			 <&clock_gcc clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
 	};
-
+/*
 	cti6: cti@816000 {
 		compatible = "arm,coresight-cti";
 		reg = <0x816000 0x1000>;
@@ -467,7 +467,7 @@
 		pinctrl-names = "cti-trigout-pctrl";
 		pinctrl-0 = <&trigout_a0>;
 	};
-
+*/
 	cti7: cti@817000 {
 		compatible = "arm,coresight-cti";
 		reg = <0x817000 0x1000>;

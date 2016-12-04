@@ -5072,7 +5072,11 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 	mdp5_interface->mode_switch_post = mdss_mode_switch_post;
 	mdp5_interface->pre_commit_fnc = mdss_mdp_overlay_precommit;
 	mdp5_interface->get_sync_fnc = mdss_mdp_rotator_sync_pt_get;
-	mdp5_interface->splash_init_fnc = mdss_mdp_splash_init;
+
+	// used for no splash log added by nubia
+	//mdp5_interface->splash_init_fnc = mdss_mdp_splash_init;
+	mdp5_interface->splash_init_fnc = NULL;
+
 	mdp5_interface->configure_panel = mdss_mdp_update_panel_info;
 	mdp5_interface->input_event_handler = mdss_mdp_input_event_handler;
 

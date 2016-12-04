@@ -50,11 +50,13 @@
 
 #include <linux/qcom_iommu.h>
 #include <linux/msm_iommu_domains.h>
-
+#include "mdss_dsi.h"
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
 #include "mdss_debug.h"
+
+#include "ztemt_disp_preference.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -120,7 +122,17 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 				      enum led_brightness value)
 {
 	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
+	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
 	int bl_lvl;
+	int shield = 0;
+
+	shield = ztemt_get_shield();
+	if (shield == 1) {
+		pr_err("shield\n");
+		return;
+	}
 
 	if (mfd->boot_notification_led) {
 		led_trigger_event(mfd->boot_notification_led, 0);
@@ -129,7 +141,9 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 
 	if (value > mfd->panel_info->brightness_max)
 		value = mfd->panel_info->brightness_max;
-
+	pr_debug("before zte transe backlight value = %d",value);
+	value = ctrl_pdata->backlight_curve[value];
+	pr_debug("after zte transe backlight value = %d",value);
 	/* This maps android backlight level 0 to 255 into
 	   driver backlight level 0 to bl_max with rounding */
 	MDSS_BRIGHT_TO_BL(bl_lvl, value, mfd->panel_info->bl_max,
@@ -836,6 +850,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = NULL;
 	struct mdss_panel_data *pdata;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct fb_info *fbi;
 	const char *data;
 	int rc;
@@ -845,8 +860,15 @@ static int mdss_fb_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	pdata = dev_get_platdata(&pdev->dev);
+
 	if (!pdata)
 		return -EPROBE_DEFER;
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	if (!ctrl_pdata)
+                return -EPROBE_DEFER;
 
 	of_property_read_u32(pdev->dev.of_node, "cell-index", &cell_index);
 	if (cell_index > fbi_list_index)
@@ -873,6 +895,11 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->mdp_fb_page_protection = MDP_FB_PAGE_PROTECTION_WRITECOMBINE;
 
 	mfd->ext_ad_ctrl = -1;
+
+	pr_debug("before zte transe backlight mfd->bl_level = %d",mfd->bl_level);
+	mfd->bl_level = ctrl_pdata->backlight_curve[mfd->bl_level];
+	pr_debug("after zte transe backlight mfd->bl_level = %d",mfd->bl_level);
+
 	if (mfd->panel_info && mfd->panel_info->brightness_max > 0)
 		MDSS_BRIGHT_TO_BL(mfd->bl_level,
 			backlight_led.brightness, mfd->panel_info->bl_max,

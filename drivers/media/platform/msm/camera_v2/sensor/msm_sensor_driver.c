@@ -26,6 +26,16 @@
 
 static struct v4l2_file_operations msm_sensor_v4l2_subdev_fops;
 
+static  unsigned char g_pcb_version = '0';
+extern void  ztemt_get_hw_pcb_version(char *);
+//wfhua add for cat module_id/actuator_name/product_data   start
+static struct class *act_class;
+static struct cdev cdev;
+dev_t devno;
+int32_t  dev_id = 0,major = 0 ;
+char 	sensor_actuator_name[32];
+int8_t    read_byte = 0;
+//wfhua add for cat cat module_id/actuator_name/product_data  end
 /* Static declaration */
 static struct msm_sensor_ctrl_t *g_sctrl[MAX_CAMERAS];
 
@@ -641,7 +651,19 @@ static int32_t msm_sensor_driver_is_special_support(
 	}
 	return rc;
 }
-
+static char get_pcb_version(void){//ZTEMT wangdeyong add for NX529J
+	char pcb_version[5] ="";
+	ztemt_get_hw_pcb_version(pcb_version);
+	pcb_version[4] ='\0';
+	pr_err("wdytest get_pcb_version=%s",pcb_version);
+	if(!strncmp(pcb_version,"unknow",strlen("unknow")) || *(pcb_version+3) < 'A' ||*(pcb_version+3) > 'I' ){
+	return '0';
+	}
+	else{
+	return *(pcb_version+3);
+	}
+}
+		
 /* static function definition */
 int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_sensor_info_t *probed_info, char *entity_name)
@@ -750,7 +772,25 @@ int32_t msm_sensor_driver_probe(void *setting,
 	CDBG("power up size %d power down size %d\n",
 		slave_info->power_setting_array.size,
 		slave_info->power_setting_array.size_down);
-
+	//ZTEMT: wangdeyong add to compile 4lane imx179   --start
+	if(slave_info->camera_id == CAMERA_1){
+		if(slave_info->sensor_name && !strncmp(slave_info->sensor_name,"imx179",strlen("imx179"))){//Only imx179 need to match with PCB
+			if( g_pcb_version >= 'B' && g_pcb_version <= 'I' && !strcmp(slave_info->sensor_name,"imx179_4lane")){
+				pr_err("wdytest pcb match success  g_pcb_version=%c  front camera sensor_name=%s\n",g_pcb_version,slave_info->sensor_name);
+			}
+			else if(g_pcb_version == 'A' && !strcmp(slave_info->sensor_name,"imx179")){
+				pr_err("wdytest pcb match success  g_pcb_version=%c  front camera  sensor_name=%s\n",g_pcb_version,slave_info->sensor_name);
+			}
+			else if(g_pcb_version ==  '0' && !strcmp(slave_info->sensor_name,"imx179_4lane")){
+				pr_err("wdytest pcb_version get failed,try to probe default front camera sensor imx179_4lane");
+			}
+			else{
+				pr_err("wdytest pcb match fail g_pcb_version=%c  sensor_name=%s\n",g_pcb_version,slave_info->sensor_name);
+				goto free_slave_info;
+			}
+		}
+	}
+	//ZTEMT: wangdeyong add to compile 4lane imx179   --end
 	if (slave_info->is_init_params_valid) {
 		CDBG("position %d",
 			slave_info->sensor_init_params.position);
@@ -924,7 +964,190 @@ CSID_TG:
 		pr_err("%s power up failed", slave_info->sensor_name);
 		goto free_camera_info;
 	}
-
+	//added by wfhua start
+	if (!strcmp(s_ctrl->sensordata->sensor_name, "imx298")) {
+		#define MODULE_ID 0x01
+		#define PD_YEAR 0x05
+		#define PD_MONTH 0x06
+		#define PD_DAY 0x07
+		uint16_t pro_module_id = 0;
+		uint16_t pro_year = 0;
+		uint16_t pro_month = 0;
+		uint16_t pro_day = 0;
+		enum msm_camera_i2c_reg_addr_type pro_addr_type;
+		pro_addr_type = s_ctrl->sensor_i2c_client->addr_type;
+		s_ctrl->sensor_i2c_client->cci_client->sid = 0xA0 >> 1;
+		s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, MODULE_ID,
+			&pro_module_id, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, PD_YEAR,
+			&pro_year, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, PD_MONTH,
+			&pro_month, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, PD_DAY,
+			&pro_day, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		pr_err("wfhua module_id=%x, year=%d, month=%d, day=%d\n", pro_module_id, pro_year, pro_month, pro_day);
+		if ( 0x6 == pro_module_id ) {
+			sprintf(sensor_actuator_name,"%s-%d-%d-%d-%d",slave_info->actuator_name,pro_module_id,pro_year,pro_month,pro_day);
+			pr_err("wfhua actuator_name = %s, eeprom_name= %s\n",slave_info->actuator_name,slave_info->eeprom_name);	
+		} else if (0x1 == pro_module_id ) {
+			if (pro_year < 16) {
+				goto probe_error;
+			} else if (pro_year == 16) {
+			 	if((pro_month < 2) && (pro_day < 9)){
+		    		goto probe_error;
+			 }else{
+			 sprintf(sensor_actuator_name,"%s-%d-%d-%d-%d",slave_info->actuator_name,pro_module_id,pro_year,pro_month,pro_day);
+			 pr_err("wfhua actuator_name = %s, eeprom_name= %s\n",slave_info->actuator_name,slave_info->eeprom_name);
+			 }
+			}
+		}
+		s_ctrl->sensor_i2c_client->cci_client->sid =
+			s_ctrl->sensordata->slave_info->sensor_slave_addr >> 1;
+		s_ctrl->sensor_i2c_client->addr_type = pro_addr_type;
+	}
+	if (!strcmp(s_ctrl->sensordata->sensor_name, "imx298_af")) {
+		#define MODULE_ID_T 0x01
+		#define PD_YEAR_T 0x05
+		#define PD_MONTH_T 0x06
+		#define PD_DAY_T 0x07
+		uint16_t pro_module_id_T = 0;
+		uint16_t pro_year_T = 0;
+		uint16_t pro_month_T = 0;
+		uint16_t pro_day_T = 0;
+		enum msm_camera_i2c_reg_addr_type T_addr_type;
+		T_addr_type = s_ctrl->sensor_i2c_client->addr_type;
+		s_ctrl->sensor_i2c_client->cci_client->sid = 0xA0 >> 1;
+		s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, MODULE_ID_T,
+			&pro_module_id_T, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, PD_YEAR_T,
+			&pro_year_T, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, PD_MONTH_T,
+			&pro_month_T, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+			s_ctrl->sensor_i2c_client, PD_DAY_T,
+			&pro_day_T, MSM_CAMERA_I2C_BYTE_DATA);
+		if (rc < 0)
+			pr_err("%s read error %d\n", __func__, __LINE__);
+		pr_err("wfhua module_id=%x, year=%d, month=%d, day=%d\n", pro_module_id_T, pro_year_T, pro_month_T, pro_day_T);
+		if ( 0x6 == pro_module_id_T ) {
+				goto probe_error;
+		} else if (0x1 == pro_module_id_T ) {
+			if (pro_year_T < 16) {
+				sprintf(sensor_actuator_name,"%s-%d-%d-%d-%d",slave_info->actuator_name,pro_module_id_T, pro_year_T, pro_month_T, pro_day_T);
+				pr_err("wfhua actuator_name = %s, eeprom_name= %s\n",slave_info->actuator_name,slave_info->eeprom_name);
+			} else if (pro_year_T == 16) {
+			 	if((pro_month_T < 2) && (pro_day_T < 9)){
+					sprintf(sensor_actuator_name,"%s-%d-%d-%d-%d",slave_info->actuator_name,pro_module_id_T, pro_year_T, pro_month_T, pro_day_T);
+		    		pr_err("wfhua actuator_name = %s, eeprom_name= %s\n",slave_info->actuator_name,slave_info->eeprom_name);
+			 }else{
+					goto probe_error;
+			 }
+			}
+		}
+		s_ctrl->sensor_i2c_client->cci_client->sid =
+			s_ctrl->sensordata->slave_info->sensor_slave_addr >> 1;
+		s_ctrl->sensor_i2c_client->addr_type = T_addr_type;
+	}
+//added by wfhua end
+	//added by congshan start
+    if (!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2")) {
+		#define ADDR_MODULE_ID 0x00
+		#define ADDR_PD_DAY 0x02
+		#define ADDR_PD_MONTH 0x03
+		#define ADDR_PD_YEAR 0x05
+		uint16_t module_id = 0;
+		uint16_t year = 0;
+		uint16_t month = 0;
+		uint16_t day = 0;
+        enum msm_camera_i2c_reg_addr_type temp_addr_type;
+        temp_addr_type = s_ctrl->sensor_i2c_client->addr_type;
+        s_ctrl->sensor_i2c_client->cci_client->sid = 0xA0 >> 1;
+        s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+        rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+            s_ctrl->sensor_i2c_client, ADDR_MODULE_ID,
+            &module_id, MSM_CAMERA_I2C_BYTE_DATA);
+        if (rc < 0)
+        	pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+            s_ctrl->sensor_i2c_client, ADDR_PD_YEAR,
+            &year, MSM_CAMERA_I2C_BYTE_DATA);
+        if (rc < 0)
+        	pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+            s_ctrl->sensor_i2c_client, ADDR_PD_MONTH,
+            &month, MSM_CAMERA_I2C_BYTE_DATA);
+        if (rc < 0)
+        	pr_err("%s read error %d\n", __func__, __LINE__);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+            s_ctrl->sensor_i2c_client, ADDR_PD_DAY,
+            &day, MSM_CAMERA_I2C_BYTE_DATA);
+        if (rc < 0)
+        	pr_err("%s read error %d\n", __func__, __LINE__);
+		pr_err("s5k3m2 module_id=%x, year=%d, month=%d, day=%d\n", module_id, year, month, day);
+		if ((0x6 == module_id) && (year < 16) && (month < 11)) {
+ 		    if (month < 10) {
+ 			    s_ctrl->sensordata->sensor_info->sensor_mount_angle = 270;
+ 			    pr_err("this is s5k3m2 qtec old module \n");
+ 		    } else if ((month == 10) && (day < 15)) {
+ 				s_ctrl->sensordata->sensor_info->sensor_mount_angle = 270;
+ 				pr_err("this is s5k3m2 qtec old module \n");
+ 		    }
+		} else if ((0x1 == module_id) && (year < 16) && (month < 11)) {
+	        if (month < 10) {
+		        s_ctrl->sensordata->sensor_info->sensor_mount_angle = 270;
+			    pr_err("this is s5k3m2 sunny old module \n");
+		    } else if ((month == 10) && (day < 32)) {
+		        s_ctrl->sensordata->sensor_info->sensor_mount_angle = 270;
+			    pr_err("this is s5k3m2 sunny old module \n");
+		    }
+		}
+        s_ctrl->sensor_i2c_client->cci_client->sid =
+            s_ctrl->sensordata->slave_info->sensor_slave_addr >> 1;
+        s_ctrl->sensor_i2c_client->addr_type = temp_addr_type;
+    }
+    //added by congshan end
+	//added by wfhua start
+    if (!strcmp(s_ctrl->sensordata->sensor_name, "imx298_af")) {
+		
+        enum msm_camera_i2c_reg_addr_type actuator_addr_type;
+        actuator_addr_type = s_ctrl->sensor_i2c_client->addr_type;
+        s_ctrl->sensor_i2c_client->cci_client->sid = 0x18 >> 1;
+        s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
+        rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+            s_ctrl->sensor_i2c_client, 0x02,
+            0x20, MSM_CAMERA_I2C_BYTE_DATA);
+        if (rc < 0)
+        	pr_err("%s write error %d\n", __func__, __LINE__);
+				
+        s_ctrl->sensor_i2c_client->cci_client->sid =
+            s_ctrl->sensordata->slave_info->sensor_slave_addr >> 1;
+        s_ctrl->sensor_i2c_client->addr_type = actuator_addr_type;
+		pr_err("wfhua actuator_name %s  ", slave_info->actuator_name);
+    }
+    //added by wfhua end
 	pr_err("%s probe succeeded", slave_info->sensor_name);
 
 	/*
@@ -986,7 +1209,8 @@ CSID_TG:
 	msm_sensor_fill_sensor_info(s_ctrl, probed_info, entity_name);
 
 	return rc;
-
+probe_error:
+	pr_err("wdy sensor_name %s probe failed\n", slave_info->sensor_name);
 camera_power_down:
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 free_camera_info:
@@ -1375,6 +1599,27 @@ static int msm_sensor_driver_i2c_remove(struct i2c_client *client)
 
 	return 0;
 }
+////wfhua add for cat module_id/actuator_name/product_data   start
+int actuator_open(struct inode *inode_zoom, struct file* file_zoom){
+	printk("%s ",__func__);
+	return 0;
+}
+
+ssize_t actuator_read(struct file *file,char __user *buf,size_t count, loff_t *loff){
+	int retval ;
+
+	//cat command need to return read_bytes to dispay and return 0 to stop
+	if(read_byte >0){
+		read_byte =0;
+		return 0;
+	}
+	read_byte = sizeof(sensor_actuator_name);
+	
+	printk("%s wfhua zoom_buf = %s read_byte = %d\n",__func__,sensor_actuator_name,read_byte);	
+	retval = copy_to_user(buf,sensor_actuator_name,read_byte);	
+	return read_byte;
+}
+//wfhua add for cat module_id/actuator_name/product_data   end
 
 static const struct i2c_device_id i2c_id[] = {
 	{SENSOR_DRIVER_I2C, (kernel_ulong_t)NULL},
@@ -1389,16 +1634,71 @@ static struct i2c_driver msm_sensor_driver_i2c = {
 		.name = SENSOR_DRIVER_I2C,
 	},
 };
+//wfhua add for cat module_id/actuator_name/product_data   start
+static const struct file_operations actuator_ops = {
+	.owner = THIS_MODULE,
+	.open   = actuator_open,
+	.read = actuator_read,
+};
 
+static int32_t msm_actuator_name_init(void)
+{
+	int32_t rc = 0;
+	struct device *device;
+	//actuator_name 
+	rc = alloc_chrdev_region(&dev_id,0,1,"z_actuator_dev");
+	if (rc ) {
+		printk("z_actuator_dev:can not get major");
+		unregister_chrdev_region(dev_id,1);
+		return rc;
+	}
+	major = MAJOR(dev_id); 
+	act_class = class_create(THIS_MODULE,"z_actuator");	
+	if (IS_ERR(act_class)) {
+		printk(KERN_WARNING "Unable to create act_class; "
+		       "errno = %ld\n", PTR_ERR(act_class));
+		unregister_chrdev_region(dev_id,1);
+		return -1;
+	}
+	cdev_init(&cdev,&actuator_ops);
+	cdev.owner = THIS_MODULE;
+	cdev.ops = &actuator_ops;
+	rc = cdev_add(&cdev,dev_id,1);
+	if (rc) {
+	printk(KERN_ERR "%s: cdev_add failed\n", __func__);
+	unregister_chrdev_region(dev_id,1);
+	return rc;
+	}
+	device = device_create(act_class,NULL,MKDEV(major,0),NULL,"z_actuator");
+	if (IS_ERR(device)) {
+		rc = PTR_ERR(device);
+	}
+	pr_err("wfhua dev_id = %d,major = %d\n",MKDEV(major,0), major);
+
+	return rc;
+}
+
+void msm_actuator_name_remove(void)
+{
+	cdev_del(&cdev);
+	device_destroy(act_class,dev_id);
+	class_destroy(act_class);
+	unregister_chrdev_region(dev_id,1);
+	printk("%s: msm_actuator_remove\n", __func__);
+}
+
+//wfhua add for cat module_id/actuator_name/product_data   end
 static int __init msm_sensor_driver_init(void)
 {
 	int32_t rc = 0;
 
 	CDBG("Enter");
+	g_pcb_version = get_pcb_version();//ZTEMT: wangdeyong add 
 	rc = platform_driver_probe(&msm_sensor_platform_driver,
 		msm_sensor_driver_platform_probe);
 	if (!rc) {
 		CDBG("probe success");
+		rc = msm_actuator_name_init();//wfhua add for cat actuator_name
 		return rc;
 	} else {
 		CDBG("probe i2c");
@@ -1409,11 +1709,14 @@ static int __init msm_sensor_driver_init(void)
 }
 
 
+
+
 static void __exit msm_sensor_driver_exit(void)
 {
 	CDBG("Enter");
 	platform_driver_unregister(&msm_sensor_platform_driver);
 	i2c_del_driver(&msm_sensor_driver_i2c);
+	msm_actuator_name_remove();//wfhua add for cat actuator_name
 	return;
 }
 
