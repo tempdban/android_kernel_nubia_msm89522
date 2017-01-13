@@ -5090,8 +5090,10 @@ static int determine_initial_status(struct smbchg_chip *chip)
 	#endif
 
 	if (chip->usb_present) {
-		pr_smb(PR_MISC, "setting usb psy allow detection 1\n");
+		pr_smb(PR_MISC, "setting usb psy dp=f dm=f\n");
 		power_supply_set_allow_detection(chip->usb_psy, 1);
+		power_supply_set_dp_dm(chip->usb_psy,
+				POWER_SUPPLY_DP_DM_DPF_DM);
 		handle_usb_insertion(chip);
 	} else {
 		handle_usb_removal(chip);
