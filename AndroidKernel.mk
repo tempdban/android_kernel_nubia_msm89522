@@ -65,9 +65,6 @@ TARGET_PREBUILT_INT_KERNEL := $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/zImage
 endif
 endif
 
-ZTEMT_DTS_NAME:=$(DTS_NAME)
-export ZTEMT_DTS_NAME
-
 
 ifeq ($(TARGET_KERNEL_APPEND_DTB), true)
 $(info Using appended DTB)
