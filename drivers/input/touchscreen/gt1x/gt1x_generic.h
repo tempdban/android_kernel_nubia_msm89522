@@ -68,8 +68,8 @@
 #ifndef GES_BUFFER_ADDR
 #warning  [GOODIX] need define GES_BUFFER_ADDR .
 #endif
-#define KEY_GES_REGULAR       KEY_F10	// regular gesture-key
-#define KEY_GES_CUSTOM        KEY_F10    //customize gesture-key
+#define KEY_GES_REGULAR       KEY_WAKEUP	// regular gesture-key
+#define KEY_GES_CUSTOM        KEY_WAKEUP    //customize gesture-key
 
 #define GTP_HOTKNOT           0	// hotknot module
 #define HOTKNOT_TYPE          0	// 0: hotknot in flash; 1: hotknot in driver

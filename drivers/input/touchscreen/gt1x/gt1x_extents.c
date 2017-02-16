@@ -297,7 +297,7 @@ s32 gesture_event_handler(struct input_dev * dev)
     GTP_INFO("Gesture: 0x%02X, points: %d", doze_buf[0], doze_buf[1]);
     #ifdef GTP_GESTURE_DOUBLE_CLICK_ONLY
     if(ges_type == 0xCC) {
-        key_code = KEY_F10;
+        key_code = KEY_WAKEUP;
     } else {
         GTP_INFO("Invalid gesture.\n");
         goto clear_reg;
