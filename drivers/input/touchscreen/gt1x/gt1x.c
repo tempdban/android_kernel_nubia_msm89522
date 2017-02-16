@@ -33,7 +33,6 @@ static const char *input_dev_phys = "input/ts";
 int gt1x_rst_gpio;
 int gt1x_int_gpio;
 #endif
-
 extern u8 gt1x_wakeup_gesture;
 extern bool gt1x_dev_halt;
 
