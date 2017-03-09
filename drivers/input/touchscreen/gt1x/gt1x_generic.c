@@ -35,6 +35,8 @@ static struct workqueue_struct *gt1x_workqueue = NULL;
 u8 gt1x_touch_mode = 0;
 u8 gt1x_wakeup_gesture = 0;
 u8 gt1x_palm_sleep = 0;
+u8 swap_buttons = 0;
+bool gt1x_keypad_enable = 1;
 
 u8 gt1x_config[GTP_CONFIG_MAX_LENGTH] = { 0 };
 u32 gt1x_cfg_length = GTP_CONFIG_MAX_LENGTH;
@@ -1333,7 +1335,7 @@ s32 gt1x_touch_event_handler(u8 * data, struct input_dev * dev, struct input_dev
 #endif
 
 #if GTP_HAVE_TOUCH_KEY
-    if (CHK_BIT(cur_event, BIT_TOUCH_KEY) || CHK_BIT(pre_event, BIT_TOUCH_KEY)) {
+    if ((CHK_BIT(cur_event, BIT_TOUCH_KEY) || CHK_BIT(pre_event, BIT_TOUCH_KEY)) && gt1x_keypad_enable) {
         for (i = 0; i < GTP_MAX_KEY_NUM; i++) {
             input_report_key(dev, gt1x_touch_key_array[i], key_value & (0x01 << i));
         }
@@ -2499,12 +2501,75 @@ static ssize_t gt1x_wakeup_gesture_store(struct device *dev,
 	return size;
 }
 
+static ssize_t gt1x_swap_buttons_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", swap_buttons);
+}
+
+static ssize_t gt1x_swap_buttons_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+
+	u8 recv = 0;
+
+	if (kstrtou8(buf, 10, &recv))
+		return -EINVAL;
+
+	if(recv==255)
+		recv=0;
+	if ((recv != 0) && (recv != 1)) {
+		return -EINVAL;
+	}
+	
+	swap_buttons = recv;
+
+	return size;
+}
+
+/**
+ * gt1x_keypad_enable_show -   keypad_enable attribute show added by dianlujitao
+ * @dev: i2c device struct.
+ * @attr: device attribute.
+ * @buf: data buffer.
+ * Return data size that writes to the buffer.
+ */
+static ssize_t gt1x_keypad_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", gt1x_keypad_enable);
+}
+
+/**
+ * gt1x_keypad_enable_store -   wakeup_gesture attribute store added by dianlujitao
+ * @dev: i2c device struct.
+ * @attr: device attribute.
+ * @buf: data buffer.
+ * @size:data buffer size.
+ * Return data size that writes to the buffer.
+ */
+static ssize_t gt1x_keypad_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int rc;
+	unsigned long val;
+
+	rc = kstrtoul(buf, 10, &val);
+	if (rc != 0)
+		return rc;
+
+	gt1x_keypad_enable = val ? 1 : 0;
+
+	return size;
+}
 
 static struct device_attribute gt1x_attrs[] = {
 	__ATTR(ic_ver,         0444, gt1x_ic_ver_show,         NULL),
 	__ATTR(touch_mode,     0664, gt1x_touch_mode_show,     gt1x_touch_mode_store),
 	__ATTR(wakeup_gesture, 0664, gt1x_wakeup_gesture_show, gt1x_wakeup_gesture_store),
 	__ATTR(palm_sleep, 0664, gt1x_palm_sleep_show, gt1x_palm_sleep_store),
+	__ATTR(swap_buttons, 0664, gt1x_swap_buttons_show, gt1x_swap_buttons_store),
+	__ATTR(keypad_enable,  0664, gt1x_keypad_enable_show,  gt1x_keypad_enable_store),
 };
 
 /**
