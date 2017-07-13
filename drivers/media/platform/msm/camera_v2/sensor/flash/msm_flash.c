@@ -18,7 +18,7 @@
 #include "msm_flash.h"
 #include "msm_camera_dt_util.h"
 #include "msm_cci.h"
-
+static u_short g_flash_probe_count = 0;//ZTEMT: add by wangdeyong to avoid the  duplicate  register of torch-light0 if the project  supports  the rear & front flash
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
